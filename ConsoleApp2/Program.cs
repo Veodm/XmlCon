@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -41,6 +43,28 @@ namespace ConsoleApp2
             {
                 throw;
             }
+        }
+
+        private static DataTable GetUserPlanWork()
+        {
+            DataTable result = new DataTable();
+            using (SqlConnection conn = new SqlConnection(string.Format("Server=DBSQL;Database=Nordavia;Integrated Security=SSPI;")))
+            {
+                conn.Open();
+                using (SqlCommand comm = new SqlCommand("select * from NpsCrew where Date>=@from and Date<=@to", conn))
+                {
+                    comm.Parameters.AddWithValue("@from", DateTime.Today.AddDays(-1));
+                    comm.Parameters.AddWithValue("@to", DateTime.Today.AddDays(10));
+                  
+                    using (SqlDataReader sqlreader = comm.ExecuteReader())
+                    {
+                        result.Load(sqlreader);
+                        for (int i = 0; i < result.Columns.Count - 1; i++)
+                            result.Columns[i].ReadOnly = false;
+                    }
+                }
+            }
+            return result;
         }
 
 
