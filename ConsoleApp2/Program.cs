@@ -8,6 +8,10 @@ using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using System.Runtime.CompilerServices;
+using Microsoft.SqlServer.Server;
+using System.Collections;
+using System.Globalization;
 
 namespace ConsoleApp2
 {    
@@ -45,7 +49,7 @@ namespace ConsoleApp2
             }
         }
 
-        private static DataTable GetUserPlanWork()
+        private static DataTable GetSql()
         {
             DataTable result = new DataTable();
             using (SqlConnection conn = new SqlConnection(string.Format("Server=DBSQL;Database=Nordavia;Integrated Security=SSPI;")))
@@ -53,9 +57,12 @@ namespace ConsoleApp2
                 conn.Open();
                 using (SqlCommand comm = new SqlCommand("select * from NpsCrew where Date>=@from and Date<=@to", conn))
                 {
-                    comm.Parameters.AddWithValue("@from", DateTime.Today.AddDays(-1));
-                    comm.Parameters.AddWithValue("@to", DateTime.Today.AddDays(10));
-                  
+                    //5Н115 Flight
+                    DateTime from = DateTime.Today.AddDays(-DateTime.Today.Day);
+                    from = from.AddDays(-from.Day + 1);
+                    comm.Parameters.AddWithValue("@from", from);
+                    comm.Parameters.AddWithValue("@to", DateTime.Today.AddDays(-DateTime.Today.Day));
+                    
                     using (SqlDataReader sqlreader = comm.ExecuteReader())
                     {
                         result.Load(sqlreader);
@@ -65,30 +72,67 @@ namespace ConsoleApp2
                 }
             }
             return result;
-        }
+        }        
 
 
         static void Main(string[] args)
         {
+            //XDocument xdoc = XDocument.Parse(Get("https://ref.flysmartavia.com/polls/xml.php?from=01.03.2023&to=31.03.2023&p=freREG3fGHRGRE435ggerg"));
+            //XElement data = xdoc.Element("data");
 
-            XDocument xdoc = XDocument.Parse(Get("https://ref.flysmartavia.com/polls/xml.php?from=01.03.2023&to=31.03.2023&p=freREG3fGHRGRE435ggerg"));
-            XElement data = xdoc.Element("data");
-            foreach (XElement person in data.Elements("pax"))
+            //var dicPax = new Dictionary<string, List<int>>();
+            //var dicMain = new Dictionary<string, Dictionary<string, List<int>>>();
+
+            //foreach (XElement person in data.Elements())
+            //{
+
+            //    XElement date = person.Element("date");
+            //    XElement flight = person.Element("flight");
+            //    string strKay = DateTime.Parse(date.Value).ToString() + flight.Value;
+            //    XElement grade = person.Element("grade");
+            //    XElement pnr = person.Element("pnr");
+            //    if (!dicPax.ContainsKey(strKay))
+            //        dicPax.Add(strKay, new List<int>());
+            //    dicPax[strKay].Add(Convert.ToInt32(grade.Value));
+            //}
+
+
+            DataTable dtCrew = GetSql();
+
+            foreach (DataRow row in dtCrew.Rows)
             {
+                string mainKey = "";
+                var cells = row.ItemArray;
+                mainKey = ((DateTime)row["Date"]).ToString("MM-yyyy");
+                Console.WriteLine(mainKey);
 
-                XElement name = person.Element("date");
-                XElement company = person.Element("flight");
-                XElement grade = person.Element("grade");
-                XElement pnr = person.Element("pnr");
-
-                Console.WriteLine($"date: {name?.Value}");
-                Console.WriteLine($"flight: {company?.Value}");
-                Console.WriteLine($"grade: {grade?.Value}");
-                Console.WriteLine($"pnr: {pnr?.Value}");
-
-                Console.WriteLine();
+                    
+                //if (!dicMain.ContainsKey(mainKey))
+                //    dicMain.Add(mainKey, new Dictionary<string, List<int>>());
+                //if (dicMain.ContainsKey(mainKey) && dicPax.ContainsKey(mainKey))
+                //    if (dicPax.Contains)
+                //        dicMain[mainKey].Add(tabNumKey, dicPax[mainKey]);
             }
-            Console.ReadLine();
+
+            Console.ReadKey();
+
+
+
+
+            //foreach (var keyMain in dicMain.Keys)
+            //{
+            //    Console.Write($"key {keyMain} tabNum:");
+            //    foreach (var tabNumKey in dicMain[keyMain])
+            //    {
+            //        Console.Write($"{tabNumKey}\t");
+            //        //foreach (var item in dicMain[keyMain][tabNumKey])
+            //        //{
+                        
+            //        //}
+            //    }
+            //    Console.WriteLine();
+            //}
+            //Console.ReadKey();
         }
     }
 }
