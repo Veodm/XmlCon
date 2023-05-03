@@ -49,19 +49,19 @@ namespace ConsoleApp2
             }
         }
 
-        private static DataTable GetSql()
+        private static DataTable GetSql(DateTime from, DateTime to)
         {
             DataTable result = new DataTable();
             using (SqlConnection conn = new SqlConnection(string.Format("Server=DBSQL;Database=Nordavia;Integrated Security=SSPI;")))
             {
                 conn.Open();
-                using (SqlCommand comm = new SqlCommand("select * from NpsCrew where Date>=@from and Date<=@to", conn))
+                using (SqlCommand comm = new SqlCommand("select * from NpsCrew where Date>=@from and Date<@to", conn))
                 {
-                    //5Н115 Flight
-                    DateTime from = DateTime.Today.AddDays(-DateTime.Today.Day);
                     from = from.AddDays(-from.Day + 1);
+                    to = to.AddMonths(1);
+                    to = to.AddDays(-to.Day + 1);
                     comm.Parameters.AddWithValue("@from", from);
-                    comm.Parameters.AddWithValue("@to", DateTime.Today.AddDays(-DateTime.Today.Day));
+                    comm.Parameters.AddWithValue("@to", to);
 
                     using (SqlDataReader sqlreader = comm.ExecuteReader())
                     {
@@ -80,13 +80,13 @@ namespace ConsoleApp2
             if (npsCount > 5)
             {
                 foreach (DataRow row in dtCoeffs.Rows)
-                {
-                    DateTime dateFrom = (DateTime)row["DateFrom"];
-                    DateTime dateTo = (DateTime)row["DateTo"];
-                    double npsFrom = (double)row["From"];
-                    double npsTo = (double)row["To"];
-                    double kFrom = (double)row["CoeffFrom"];
-                    double kTo = (double)row["CoeffTo"];
+                {                    
+                    DateTime dateFrom = DateTime.Parse(row["DateFrom"].ToString());
+                    DateTime dateTo = DateTime.Parse(row["DateTo"].ToString());
+                    double npsFrom = double.Parse(row["From"].ToString());
+                    double npsTo = double.Parse(row["To"].ToString());
+                    double kFrom = double.Parse(row["CoeffFrom"].ToString());
+                    double kTo = double.Parse(row["CoeffTo"].ToString());
 
                     if (date >= dateFrom && date <= dateTo && nps >= npsFrom && nps <= npsTo)
                     {
@@ -143,7 +143,9 @@ namespace ConsoleApp2
                 dicPax[strKey].Add(Convert.ToInt32(grade.Value));
             }
 
-            DataTable dtCrew = GetSql();
+            DateTime from = DateTime.Parse("2023/03/01");
+            DateTime to = DateTime.Parse("2023/03/31");
+            DataTable dtCrew = GetSql(from,to);
             foreach (DataRow rowCrew in dtCrew.Rows)
             {
                 var mainKey = GetDateKey((DateTime)rowCrew["Date"]);
@@ -173,7 +175,13 @@ namespace ConsoleApp2
                         nps += grade;
                         npsCount++;
                     }
-                    nps /= npsCount;
+                    if (npsCount > 0)
+                        nps /= npsCount;
+                    else
+                    {
+                        nps = 1;
+                        npsCount = 1;
+                    }
 
                     double coeff = FindCoeff(period, nps, dtPar, npsCount);
 
@@ -202,9 +210,9 @@ namespace ConsoleApp2
                     {
                         npsAll += grade[0];
                         coeffAll += grade[1];                        
-                        if (grade[1] > 0)
+                        if (grade[1] > 1)
                             coeffMore1++;
-                        else if (grade[1] < 0)
+                        else if (grade[1] < 1)
                             coeffLess1++;
                         else
                             coeff1++;
