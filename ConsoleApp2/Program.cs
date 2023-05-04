@@ -12,6 +12,8 @@ using System.Runtime.CompilerServices;
 using Microsoft.SqlServer.Server;
 using System.Collections;
 using System.Globalization;
+using Microsoft.SharePoint;
+using System.Xml;
 
 namespace ConsoleApp2
 {
@@ -114,22 +116,13 @@ namespace ConsoleApp2
             var dicMain = new Dictionary<DateTime, Dictionary<string, List<int>>>();
             var dicCoeff = new Dictionary<DateTime, Dictionary<string, List<double[]>>>();
             var dicRes = new Dictionary<DateTime, List<double[]>>();
+            
+            DataTable dtCoefficients = new DataTable();
 
-            DataTable dtPar = new DataTable();
-            dtPar.Columns.Add("From");
-            dtPar.Columns.Add("To");
-            dtPar.Columns.Add("CoeffFrom");
-            dtPar.Columns.Add("CoeffTo");
-            dtPar.Columns.Add("DateFrom");
-            dtPar.Columns.Add("DateTo");
-
-            dtPar.Rows.Add(0, 5, 1, 1, new DateTime(2021, 11, 01), new DateTime(2022, 01, 31));
-            dtPar.Rows.Add(0, 1.5, 0, 0, new DateTime(2022, 02, 01), new DateTime(2030, 01, 01));
-            dtPar.Rows.Add(1.5, 3.5, 0, 0.5, new DateTime(2022, 02, 01), new DateTime(2030, 01, 01));
-            dtPar.Rows.Add(3.5, 5.5, 0.5, 1, new DateTime(2022, 02, 01), new DateTime(2030, 01, 01));
-            dtPar.Rows.Add(5.5, 6, 1, 1, new DateTime(2022, 02, 01), new DateTime(2030, 01, 01));
-            dtPar.Rows.Add(6, 7, 1, 1.25, new DateTime(2022, 02, 01), new DateTime(2030, 01, 01));
-
+            SPWeb web = SPContext.Current.Web;
+            SPList list = web.Lists["Коэффициент качества работы БП"];
+            dtCoefficients = list.Items.GetDataTable();
+            
             foreach (XElement person in data.Elements())
             {
 
@@ -183,7 +176,7 @@ namespace ConsoleApp2
                         npsCount = 1;
                     }
 
-                    double coeff = FindCoeff(period, nps, dtPar, npsCount);
+                    double coeff = FindCoeff(period, nps, dtCoefficients, npsCount);
 
                     if (!dicCoeff.ContainsKey(period))
                         dicCoeff.Add(period, new Dictionary<string, List<double[]>>());
@@ -226,12 +219,60 @@ namespace ConsoleApp2
                     dicRes.Add(period,new List<double[]>());
                     dicRes[period].Add(new double[] {npsAll, coeffAll,coeffMore1,coeff1,coeffLess1});
                 }
-                
+              
             }
 
             Console.ReadLine();
-        }
 
-        
+            using (MemoryStream ms = new MemoryStream())
+            {
+                Guid siteId = SPContext.Current.Site.ID;
+                Guid webId = SPContext.Current.Web.ID;
+                SPSecurity.RunWithElevatedPrivileges(delegate
+                {
+                    using (SPSite site = new SPSite(siteId))
+                    using (SPWeb web = site.OpenWeb(webId))
+                    {
+                        XmlTextWriter writer = new XmlTextWriter(ms, Encoding.UTF8);
+                        SPList listTargets = web.GetList(web.Url + "/Lists/targets");
+                        int prevMonth = DateTime.Today.AddMonths(-1).Month;
+                        int prevYear = DateTime.Today.AddMonths(-1).Year;
+                        int thisMonth = DateTime.Today.Month;
+                        int thisYear = DateTime.Today.Year;
+
+                        SPQuery query = new SPQuery
+                        {
+                            Query = string.Format(@"<Where><Or>
+    <And><Eq><FieldRef Name='Year' /><Value Type='Number'>{0}</Value></Eq><Eq><FieldRef Name='Month' /><Value Type='Number'>{1}</Value></Eq></And>
+    <And><Eq><FieldRef Name='Year' /><Value Type='Number'>{2}</Value></Eq><Eq><FieldRef Name='Month' /><Value Type='Number'>{3}</Value></Eq></And>
+</Or></Where>", prevYear, prevMonth, thisYear, thisMonth)
+                        };
+                        SPListItemCollection items = listTargets.GetItems(query);
+                        SPListItem[] itemsPrev = items.OfType<SPListItem>().Where(i => int.Parse(i["Year"] + "") == prevYear && int.Parse(i["Month"] + "") == prevMonth).ToArray();
+                        SPListItem[] itemsThis = items.OfType<SPListItem>().Where(i => int.Parse(i["Year"] + "") == thisYear && int.Parse(i["Month"] + "") == thisMonth).ToArray();
+
+                        writer.WriteStartDocument();
+                        writer.WriteStartElement("Items");
+                        foreach (SPListItem itemPrev in itemsPrev)
+                        {
+                            SPUser user = new SPFieldUserValue(web, itemPrev["User"] + "").User;
+                            SPListItem itemThis = itemsThis.FirstOrDefault(i => i["User"] + "" == itemPrev["User"] + "");
+                            List<string> messages = new List<string>();
+                            writer.WriteStartElement("Item");
+                            writer.WriteAttributeString("Message", string.Join(" и ", messages.ToArray()));
+                            writer.WriteAttributeString("User", user.Email);
+                            writer.WriteAttributeString("PrevMonthTargetId", itemPrev.ID.ToString());
+                            writer.WriteEndElement();
+                        }
+                        writer.WriteEndElement();
+                        writer.WriteEndDocument();
+                        writer.Flush();
+                    }
+                });
+
+                var xml = new XmlDocument();
+                ms.Position = 0;
+                xml.LoadXml(new StreamReader(ms).ReadToEnd());
+            }        
     }
 }
